@@ -2,93 +2,41 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Admin Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini App</title>
+    <!-- Telegram Web App API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: white; padding: 20px; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
-        input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: none; box-sizing: border-box; }
-        input { background: #2a2a2a; color: white; }
-        button { background: #32a852; color: white; font-weight: bold; cursor: pointer; }
-        .list-item { background: #2a2a2a; margin-top: 10px; padding: 10px; border-radius: 8px; display: flex; justify-content: space-between;}
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #f4f4f4);
+            color: var(--tg-theme-text-color, #000);
+            margin: 0;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
-    <h2>⚙️ Boshqaruv Paneli</h2>
-
-    <div class="card">
-        <h3>📂 Yangi Bo'lim (Kategoriya) qo'shish</h3>
-        <input type="text" id="cat-name" placeholder="Bo'lim nomi (Masalan: Premium xarid)">
-        <input type="text" id="cat-icon" placeholder="Ikonka (Masalan: ⭐️)">
-        <button onclick="addCategory()">+ Bo'limni saqlash</button>
-    </div>
-
-    <div class="card">
-        <h3>📋 Mavjud bo'limlar</h3>
-        <div id="categories-list">Yuklanmoqda...</div>
-    </div>
-
-    <div class="card">
-        <h3>🛍 Mahsulot qo'shish</h3>
-        <select id="prod-category" style="width:100%; padding:12px; background:#2a2a2a; color:white; border-radius:8px; border:none; margin-top:10px;"></select>
-        <input type="text" id="prod-title" placeholder="Mahsulot nomi (Masalan: 100 Stars)">
-        <input type="number" id="prod-price" placeholder="Narxi (so'mda)">
-        <input type="text" id="prod-image" placeholder="Rasm havolasi (URL)">
-        <button onclick="addProduct()">+ Mahsulotni saqlash</button>
-    </div>
-
+    <div class="header">Xush kelibsiz, <span id="username"></span>!</div>
+    
     <script>
-        // Barcha bo'limlarni bazadan tortib olish
-        async function loadCategories() {
-            const res = await fetch('/api/categories');
-            const data = await res.json();
-            const list = document.getElementById('categories-list');
-            const select = document.getElementById('prod-category');
-            
-            list.innerHTML = '';
-            select.innerHTML = '<option value="">Bo'limni tanlang...</option>';
-            
-            data.categories.forEach(cat => {
-                // Ro'yxatga qo'shish
-                list.innerHTML += `<div class="list-item"><span>${cat.icon} ${cat.name}</span></div>`;
-                // Select (Tanlov) ichiga qo'shish
-                select.innerHTML += `<option value="${cat._id}">${cat.name}</option>`;
-            });
+        // Telegram Web App obyekti
+        const tg = window.Telegram.WebApp;
+        
+        // Ekranni to'liq ochish
+        tg.expand(); 
+        
+        // Foydalanuvchi ismini chiqarish
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            document.getElementById('username').innerText = user.first_name;
         }
-
-        // Yangi bo'lim qo'shish funksiyasi
-        async function addCategory() {
-            const name = document.getElementById('cat-name').value;
-            const icon = document.getElementById('cat-icon').value;
-            if(!name) return alert("Nomini kiriting!");
-            
-            await fetch('/api/categories', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, icon })
-            });
-            alert("Bo'lim qo'shildi!");
-            loadCategories(); // Ro'yxatni yangilash
-        }
-
-        // Yangi mahsulot qo'shish funksiyasi
-        async function addProduct() {
-            const categoryId = document.getElementById('prod-category').value;
-            const title = document.getElementById('prod-title').value;
-            const price = document.getElementById('prod-price').value;
-            const imageUrl = document.getElementById('prod-image').value;
-
-            if(!categoryId || !title || !price) return alert("Ma'lumotlarni to'liq kiriting!");
-
-            await fetch('/api/products', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ categoryId, title, price, imageUrl })
-            });
-            alert("Mahsulot qo'shildi!");
-        }
-
-        loadCategories(); // Sahifa ochilganda bo'limlarni yuklash
     </script>
 </body>
 </html>
