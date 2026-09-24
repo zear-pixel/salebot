@@ -3,139 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mini App</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <title>Admin Panel</title>
     <style>
-        :root {
-            --bg-color: var(--tg-theme-bg-color, #1a1a1a);
-            --text-color: var(--tg-theme-text-color, #ffffff);
-            --card-bg: var(--tg-theme-secondary-bg-color, #2a2a2a);
-            --blue: #32a852; /* Balans kartasi rangi */
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 16px;
-        }
-        .balance-card {
-            background: linear-gradient(135deg, #1cb5e0 0%, #000851 100%);
-            border-radius: 16px;
-            padding: 20px;
-            color: white;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
-        .balance-title { font-size: 14px; opacity: 0.8; margin-bottom: 5px; }
-        .balance-amount { font-size: 32px; font-weight: bold; margin-bottom: 15px; }
-        .btn-fill {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .category-list { display: flex; flex-direction: column; gap: 12px; }
-        .category-item {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-        }
-        .category-info { display: flex; align-items: center; gap: 12px; }
-        .category-icon { font-size: 24px; }
-        .category-name { font-size: 16px; font-weight: 500; }
-        #admin-btn {
-            display: none;
-            width: 100%;
-            background-color: #ff3b30;
-            color: white;
-            border: none;
-            padding: 14px;
-            border-radius: 12px;
-            margin-top: 20px;
-            font-size: 16px;
-            font-weight: bold;
-        }
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; padding: 20px; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: none; box-sizing: border-box; }
+        input { background: #2a2a2a; color: white; }
+        button { background: #32a852; color: white; font-weight: bold; cursor: pointer; }
+        .list-item { background: #2a2a2a; margin-top: 10px; padding: 10px; border-radius: 8px; display: flex; justify-content: space-between;}
     </style>
 </head>
 <body>
-    <div class="balance-card">
-        <div class="balance-title">BALANS</div>
-        <div class="balance-amount"><span id="user-balance">0</span> so'm</div>
-        <button class="btn-fill">+ To'ldirish</button>
+    <h2>⚙️ Boshqaruv Paneli</h2>
+
+    <div class="card">
+        <h3>📂 Yangi Bo'lim (Kategoriya) qo'shish</h3>
+        <input type="text" id="cat-name" placeholder="Bo'lim nomi (Masalan: Premium xarid)">
+        <input type="text" id="cat-icon" placeholder="Ikonka (Masalan: ⭐️)">
+        <button onclick="addCategory()">+ Bo'limni saqlash</button>
     </div>
 
-    <div class="category-list" id="category-container">
-        <!-- Kategoriyalar shu yerga JavaScript orqali tushadi -->
-        <div style="text-align:center; padding:20px;">Yuklanmoqda...</div>
+    <div class="card">
+        <h3>📋 Mavjud bo'limlar</h3>
+        <div id="categories-list">Yuklanmoqda...</div>
     </div>
 
-    <button id="admin-btn" onclick="openAdminPanel()">⚙️ Admin Panelga kirish</button>
+    <div class="card">
+        <h3>🛍 Mahsulot qo'shish</h3>
+        <select id="prod-category" style="width:100%; padding:12px; background:#2a2a2a; color:white; border-radius:8px; border:none; margin-top:10px;"></select>
+        <input type="text" id="prod-title" placeholder="Mahsulot nomi (Masalan: 100 Stars)">
+        <input type="number" id="prod-price" placeholder="Narxi (so'mda)">
+        <input type="text" id="prod-image" placeholder="Rasm havolasi (URL)">
+        <button onclick="addProduct()">+ Mahsulotni saqlash</button>
+    </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
+        // Barcha bo'limlarni bazadan tortib olish
+        async function loadCategories() {
+            const res = await fetch('/api/categories');
+            const data = await res.json();
+            const list = document.getElementById('categories-list');
+            const select = document.getElementById('prod-category');
+            
+            list.innerHTML = '';
+            select.innerHTML = '<option value="">Bo'limni tanlang...</option>';
+            
+            data.categories.forEach(cat => {
+                // Ro'yxatga qo'shish
+                list.innerHTML += `<div class="list-item"><span>${cat.icon} ${cat.name}</span></div>`;
+                // Select (Tanlov) ichiga qo'shish
+                select.innerHTML += `<option value="${cat._id}">${cat.name}</option>`;
+            });
+        }
 
-        const user = tg.initDataUnsafe?.user;
-        const categoryContainer = document.getElementById('category-container');
-
-        if (user) {
-            // 1. Foydalanuvchini bazadan tekshirish va balansni olish
-            fetch('/api/user', {
+        // Yangi bo'lim qo'shish funksiyasi
+        async function addCategory() {
+            const name = document.getElementById('cat-name').value;
+            const icon = document.getElementById('cat-icon').value;
+            if(!name) return alert("Nomini kiriting!");
+            
+            await fetch('/api/categories', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telegramId: user.id.toString(), firstName: user.first_name })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('user-balance').innerText = data.user.balance;
-                    // Agar kirgan odam admin bo'lsa, tugmani ko'rsatish
-                    if (data.user.role === 'admin') {
-                        document.getElementById('admin-btn').style.display = 'block';
-                    }
-                }
+                body: JSON.stringify({ name, icon })
             });
-
-            // 2. Kategoriyalarni yuklash
-            fetch('/api/categories')
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    categoryContainer.innerHTML = '';
-                    if (data.categories.length === 0) {
-                        categoryContainer.innerHTML = '<div style="text-align:center; color:gray;">Hozircha bo\'limlar yo\'q</div>';
-                    }
-                    data.categories.forEach(cat => {
-                        const item = document.createElement('div');
-                        item.className = 'category-item';
-                        item.innerHTML = `
-                            <div class="category-info">
-                                <span class="category-icon">${cat.icon || '📁'}</span>
-                                <span class="category-name">${cat.name}</span>
-                            </div>
-                            <span>›</span>
-                        `;
-                        categoryContainer.appendChild(item);
-                    });
-                }
-            });
-        } else {
-            categoryContainer.innerHTML = 'Faqat Telegram orqali kirish mumkin.';
+            alert("Bo'lim qo'shildi!");
+            loadCategories(); // Ro'yxatni yangilash
         }
 
-        function openAdminPanel() {
-            // Admin panel sahifasiga o'tish
-            window.location.href = '/admin.html';
+        // Yangi mahsulot qo'shish funksiyasi
+        async function addProduct() {
+            const categoryId = document.getElementById('prod-category').value;
+            const title = document.getElementById('prod-title').value;
+            const price = document.getElementById('prod-price').value;
+            const imageUrl = document.getElementById('prod-image').value;
+
+            if(!categoryId || !title || !price) return alert("Ma'lumotlarni to'liq kiriting!");
+
+            await fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ categoryId, title, price, imageUrl })
+            });
+            alert("Mahsulot qo'shildi!");
         }
+
+        loadCategories(); // Sahifa ochilganda bo'limlarni yuklash
     </script>
 </body>
 </html>
