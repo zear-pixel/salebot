@@ -7,85 +7,60 @@ require('dotenv').config();
 const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const PORT = process.env.PORT || 3000;
-const ADMIN_ID = process.env.ADMIN_ID; // Sizning Telegram ID raqamingiz
+const ADMIN_ID = process.env.ADMIN_ID; 
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// MongoDB Sxemalari
-const userSchema = new mongoose.Schema({
-    telegramId: { type: String, required: true, unique: true },
-    firstName: String,
-    balance: { type: Number, default: 0 },
-    role: { type: String, default: 'user' }
-});
-const User = mongoose.model('User', userSchema);
+// --- BAZA SXEMALARI ---
+const User = mongoose.model('User', new mongoose.Schema({
+    telegramId: String, firstName: String, balance: { type: Number, default: 0 }, role: String
+}));
+const Category = mongoose.model('Category', new mongoose.Schema({
+    name: String, icon: String, isActive: { type: Boolean, default: true }
+}));
+const Product = mongoose.model('Product', new mongoose.Schema({
+    categoryId: mongoose.Schema.Types.ObjectId, title: String, price: Number, stock: Number, imageUrl: String, isActive: { type: Boolean, default: true }
+}));
 
-const categorySchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    icon: String,
-    order: Number,
-    isActive: { type: Boolean, default: true }
-});
-const Category = mongoose.model('Category', categorySchema);
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("MongoDB ulangan"));
 
-const productSchema = new mongoose.Schema({
-    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-    title: { type: String, required: true },
-    description: String,
-    price: { type: Number, required: true },
-    stock: { type: Number, default: 100 },
-    imageUrl: String,
-    isActive: { type: Boolean, default: true }
-});
-const Product = mongoose.model('Product', productSchema);
-
-// MongoDB'ga ulanish
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("MongoDB'ga ulandi"))
-    .catch(err => console.error("Baza xatosi:", err));
-
-// API: Foydalanuvchini ro'yxatga olish va ma'lumotini berish
+// --- API YO'LLARI ---
 app.post('/api/user', async (req, res) => {
     const { telegramId, firstName } = req.body;
-    try {
-        let user = await User.findOne({ telegramId });
-        if (!user) {
-            user = new User({ telegramId, firstName, role: telegramId === ADMIN_ID ? 'admin' : 'user' });
-            await user.save();
-        }
-        res.json({ success: true, user });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    let user = await User.findOne({ telegramId });
+    if (!user) user = await User.create({ telegramId, firstName, role: telegramId === ADMIN_ID ? 'admin' : 'user' });
+    else if (telegramId === ADMIN_ID && user.role !== 'admin') { user.role = 'admin'; await user.save(); }
+    res.json({ success: true, user });
 });
 
-// API: Bo'limlarni (Kategoriyalarni) olish
+// Kategoriyalarni olish va qo'shish
 app.get('/api/categories', async (req, res) => {
-    try {
-        const categories = await Category.find({ isActive: true }).sort({ order: 1 });
-        res.json({ success: true, categories });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    const categories = await Category.find();
+    res.json({ success: true, categories });
+});
+app.post('/api/categories', async (req, res) => {
+    const newCategory = await Category.create(req.body);
+    res.json({ success: true, category: newCategory });
 });
 
-// Cron-job uchun
+// Mahsulotlarni olish va qo'shish
+app.get('/api/products/:categoryId', async (req, res) => {
+    const products = await Product.find({ categoryId: req.params.categoryId });
+    res.json({ success: true, products });
+});
+app.post('/api/products', async (req, res) => {
+    const newProduct = await Product.create(req.body);
+    res.json({ success: true, product: newProduct });
+});
+
 app.get('/ping', (req, res) => res.status(200).send("OK"));
 
-// Bot komandalari
 bot.start((ctx) => {
-    ctx.reply("Assalomu alaykum! Xizmatlardan foydalanish uchun ilovani oching.", {
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: "Ilovani ochish", web_app: { url: process.env.WEB_APP_URL } }]
-            ]
-        }
+    ctx.reply("Xush kelibsiz! Ilovani oching:", {
+        reply_markup: { inline_keyboard: [[{ text: "Ilovani ochish", web_app: { url: process.env.WEB_APP_URL } }]] }
     });
 });
 
 bot.launch();
-app.listen(PORT, () => console.log(`Server ${PORT}-portda ishlamoqda`));
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+app.listen(PORT, () => console.log(`Server ishladi: ${PORT}`));
