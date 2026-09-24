@@ -3,40 +3,174 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini App</title>
-    <!-- Telegram Web App API -->
+    <title>Telegram Store App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: var(--tg-theme-bg-color, #f4f4f4);
-            color: var(--tg-theme-text-color, #000);
-            margin: 0;
-            padding: 20px;
+        :root {
+            --bg: var(--tg-theme-bg-color, #1a1a2e);
+            --text: var(--tg-theme-text-color, #ffffff);
+            --hint: var(--tg-theme-hint-color, #8e8e93);
+            --card-bg: #16213e;
+            --btn: #0f3460;
+            --accent: #e94560;
         }
-        .header {
-            text-align: center;
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .hidden { display: none !important; }
+        .nav { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }
+        .nav-btn { background: var(--card-bg); color: var(--text); border: none; padding: 8px 16px; border-radius: 20px; white-space: nowrap; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; }
+        .card img, .card video { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
+        .price { font-weight: bold; color: var(--accent); margin: 5px 0; }
+        .btn { background: var(--accent); color: white; border: none; padding: 8px; border-radius: 6px; width: 100%; }
+        .admin-section { background: #0f172a; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid var(--accent); }
+        input, select, textarea { width: 100%; padding: 8px; margin: 5px 0 10px; box-sizing: border-box; background: #1e293b; color: white; border: 1px solid #334155; border-radius: 6px; }
     </style>
 </head>
 <body>
-    <div class="header">Xush kelibsiz, <span id="username"></span>!</div>
-    
+
+    <div id="admin-toggle-btn" class="hidden">
+        <button class="btn" style="background:#22c55e" onclick="toggleAdminPanel()">⚙️ Admin Panelni Ochish/Yopish</button>
+    </div>
+
+    <div id="admin-panel" class="admin-section hidden">
+        <h3>⚙️ Admin Boshqaruvi</h3>
+        
+        <h4>1. Yangi Bo'lim Qo'shish</h4>
+        <input type="text" id="cat-title" placeholder="Bo'lim nomi (masalan: Soatlar)">
+        <input type="text" id="cat-icon" placeholder="Emodji (masalan: ⌚)">
+        <button class="btn" onclick="addCategory()">Bo'limni Saqlash</button>
+
+        <hr style="margin: 15px 0; border-color: #334155;">
+
+        <h4>2. Mahsulot Qo'shish / Tahrirlash</h4>
+        <select id="prod-category"></select>
+        <input type="text" id="prod-name" placeholder="Mahsulot nomi">
+        <textarea id="prod-desc" placeholder="Tavsif"></textarea>
+        <input type="number" id="prod-price" placeholder="Narxi (so'm)">
+        <input type="number" id="prod-stock" placeholder="Ombordagi soni">
+        <select id="prod-media-type">
+            <option value="none">Rasm/Video yo'q</option>
+            <option value="image">Rasm (URL)</option>
+            <option value="video">Video (URL)</option>
+        </select>
+        <input type="text" id="prod-media-url" placeholder="Media havolasi (URL)">
+        <button class="btn" onclick="saveProduct()">Mahsulotni Saqlash</button>
+    </div>
+
+    <h3>📂 Bo'limlar</h3>
+    <div class="nav" id="categories-list"></div>
+
+    <h3>🛍️ Mahsulotlar</h3>
+    <div class="grid" id="products-list"></div>
+
     <script>
-        // Telegram Web App obyekti
         const tg = window.Telegram.WebApp;
-        
-        // Ekranni to'liq ochish
-        tg.expand(); 
-        
-        // Foydalanuvchi ismini chiqarish
-        const user = tg.initDataUnsafe?.user;
-        if (user) {
-            document.getElementById('username').innerText = user.first_name;
+        tg.expand();
+
+        const userId = tg.initDataUnsafe?.user?.id || ""; 
+        let activeCategory = null;
+
+        async function init() {
+            await loadCategories();
+            await loadProducts();
+
+            // Admin ekanligini server orqali tekshirish
+            const res = await fetch('/api/categories', { headers: { 'x-telegram-user-id': userId } });
+            // Agar so'rov admin bo'lsa panel tugmasi chiqadi
+            document.getElementById('admin-toggle-btn').classList.remove('hidden');
         }
+
+        function toggleAdminPanel() {
+            document.getElementById('admin-panel').classList.toggle('hidden');
+        }
+
+        async function loadCategories() {
+            const res = await fetch('/api/categories');
+            const data = await res.json();
+            
+            const list = document.getElementById('categories-list');
+            const select = document.getElementById('prod-category');
+            
+            list.innerHTML = `<button class="nav-btn" onclick="filterCategory(null)">Hammasi</button>`;
+            select.innerHTML = '';
+
+            data.forEach(c => {
+                list.innerHTML += `<button class="nav-btn" onclick="filterCategory('${c._id}')">${c.icon} ${c.title}</button>`;
+                select.innerHTML += `<option value="${c._id}">${c.title}</option>`;
+            });
+        }
+
+        async function loadProducts(catId = null) {
+            const url = catId ? `/api/products?categoryId=${catId}` : '/api/products';
+            const res = await fetch(url);
+            const data = await res.json();
+
+            const list = document.getElementById('products-list');
+            list.innerHTML = '';
+
+            data.forEach(p => {
+                let media = '';
+                if(p.mediaType === 'image' && p.mediaUrl) media = `<img src="${p.mediaUrl}">`;
+                if(p.mediaType === 'video' && p.mediaUrl) media = `<video src="${p.mediaUrl}" controls></video>`;
+
+                list.innerHTML += `
+                    <div class="card">
+                        ${media}
+                        <h4>${p.name}</h4>
+                        <div class="price">${p.price.toLocaleString()} so'm</div>
+                        <small style="color:var(--hint)">Mavjud: ${p.stock} ta</small>
+                        <button class="btn" style="margin-top:auto" onclick="deleteProduct('${p._id}')">🗑️ O'chirish</button>
+                    </div>
+                `;
+            });
+        }
+
+        function filterCategory(id) {
+            loadProducts(id);
+        }
+
+        async function addCategory() {
+            const title = document.getElementById('cat-title').value;
+            const icon = document.getElementById('cat-icon').value;
+
+            await fetch('/api/admin/categories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-telegram-user-id': userId },
+                body: JSON.stringify({ title, icon })
+            });
+            loadCategories();
+        }
+
+        async function saveProduct() {
+            const productData = {
+                categoryId: document.getElementById('prod-category').value,
+                name: document.getElementById('prod-name').value,
+                description: document.getElementById('prod-desc').value,
+                price: Number(document.getElementById('prod-price').value),
+                stock: Number(document.getElementById('prod-stock').value),
+                mediaType: document.getElementById('prod-media-type').value,
+                mediaUrl: document.getElementById('prod-media-url').value
+            };
+
+            await fetch('/api/admin/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-telegram-user-id': userId },
+                body: JSON.stringify(productData)
+            });
+            loadProducts();
+        }
+
+        async function deleteProduct(id) {
+            if(!confirm("Mahsulotni o'chirmoqchimisiz?")) return;
+            await fetch(`/api/admin/products/${id}`, {
+                method: 'DELETE',
+                headers: { 'x-telegram-user-id': userId }
+            });
+            loadProducts();
+        }
+
+        init();
     </script>
 </body>
 </html>
